@@ -1,0 +1,5 @@
+PyYAML>=6.0
+Flask>=3.0
+icmplib>=3.0
+requests>=2.31
+python-nmap>=0.7.1
