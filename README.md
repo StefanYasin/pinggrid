@@ -16,6 +16,10 @@ It was built to demonstrate practical networking and scripting skills: TCP/IP, I
 
 ## Features
 
+- **Telegram alerts** (roadmap #1) — push alerts to your phone via bot
+- **Local trend history** (roadmap #1) — append-only JSONL history with uptime summaries, zero cloud
+
+
 - **Device availability monitoring** via ICMP ping
 - **Response time tracking** with historical averages
 - **Port scanning** to verify services are listening (SSH, HTTP, RDP, etc.)

@@ -25,6 +25,10 @@ alerts:
   webhook:
     enabled: false
     url: ""
+  telegram:
+    enabled: false
+    bot_token: ""     # from @BotFather
+    chat_id: ""       # your chat id (get via @userinfobot)
   console:
     enabled: true
 

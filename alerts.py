@@ -53,8 +53,28 @@ def send_webhook_alert(config, device_name, message):
         log.error(f"Failed to send webhook alert: {e}")
 
 
+def send_telegram_alert(config, device_name, message):
+    """Send alert via Telegram bot API (community roadmap: alert delivery)."""
+    if not config.get("enabled"):
+        return
+
+    try:
+        token = config.get("bot_token", "")
+        chat_id = config.get("chat_id", "")
+        if not token or not chat_id:
+            log.warning("Telegram alert enabled but bot_token/chat_id missing")
+            return
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": f"⚠️ [{device_name}] {message}"}
+        requests.post(url, json=payload, timeout=5)
+        log.info(f"Telegram alert sent for {device_name}")
+    except Exception as e:
+        log.error(f"Failed to send telegram alert: {e}")
+
+
 def dispatch_alert(alert_config, device_name, message, severity="WARNING"):
     """Dispatch alert through all enabled channels."""
     send_console_alert(device_name, message, severity)
     send_email_alert(alert_config.get("email", {}), device_name, message)
     send_webhook_alert(alert_config.get("webhook", {}), device_name, message)
+    send_telegram_alert(alert_config.get("telegram", {}), device_name, message)
