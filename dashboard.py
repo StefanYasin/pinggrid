@@ -1,9 +1,11 @@
 """
 Lightweight Flask dashboard for the network monitor.
+Shares the auto-configuring loader with monitor.py, so it never
+crashes on a missing config.yaml - first run discovers the network.
 """
 
 from flask import Flask, render_template_string
-import yaml
+from autoconfig import load_config, DEFAULT_CONFIG_PATH
 from checker import check_device
 from logger import get_logger
 
@@ -60,11 +62,6 @@ HTML_TEMPLATE = """
 
 app = Flask(__name__)
 config = None
-
-
-def load_config(path="config.yaml"):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
 
 
 def get_device_status(config):

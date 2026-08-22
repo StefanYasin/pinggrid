@@ -1,18 +1,28 @@
+# PingGrid configuration.
+#
+# You normally don't need this file: on first run PingGrid detects your
+# network (gateway, local IP, subnet sweep) and auto-creates config.yaml.
+# This file documents every option if you want to configure things by hand.
+# Copy to config.yaml and edit, or run: python monitor.py --reset-config
+
 devices:
-  - name: "Core Switch"
-    host: "192.168.1.1"
-    ports: [22, 80, 443]
-  - name: "ESXi Host"
-    host: "192.168.1.10"
-    ports: [22, 443, 902]
+  - name: "This Machine"
+    host: "192.168.2.100"
+    ports: []
   - name: "Gateway"
-    host: "192.168.1.254"
-    ports: [22, 80]
+    host: "192.168.2.1"
+    ports: [80, 443]
+
+monitor:
+  interval_seconds: 30        # seconds between check cycles
 
 thresholds:
-  ping_timeout: 3
-  port_timeout: 2
-  max_response_time: 100
+  ping_timeout: 3             # seconds per ping
+  port_timeout: 2             # seconds per port connect
+  max_response_time: 100      # ms before latency warning
+
+alerting:
+  repeat_interval_minutes: 15 # re-alert while a device stays down
 
 alerts:
   email:

@@ -11,9 +11,8 @@ log = get_logger(__name__)
 
 
 def send_console_alert(device_name, message, severity="WARNING"):
-    """Print alert to console."""
+    """Log alert to console (honored only when console alerts are enabled)."""
     log.warning(f"[{severity}] {device_name}: {message}")
-    print(f"[{severity}] {device_name}: {message}")
 
 
 def send_email_alert(config, device_name, message):
@@ -74,7 +73,9 @@ def send_telegram_alert(config, device_name, message):
 
 def dispatch_alert(alert_config, device_name, message, severity="WARNING"):
     """Dispatch alert through all enabled channels."""
-    send_console_alert(device_name, message, severity)
+    console = alert_config.get("console", {})
+    if console.get("enabled", True):
+        send_console_alert(device_name, message, severity)
     send_email_alert(alert_config.get("email", {}), device_name, message)
     send_webhook_alert(alert_config.get("webhook", {}), device_name, message)
     send_telegram_alert(alert_config.get("telegram", {}), device_name, message)

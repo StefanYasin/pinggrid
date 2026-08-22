@@ -1,6 +1,6 @@
-# Network Monitor Dashboard
+# PingGrid
 
-A lightweight, self-contained network monitoring tool built in Python. It monitors device availability, tracks response times, checks open ports, and sends alerts when things go down. Designed to be simple to deploy in a homelab or small business environment.
+A lightweight, self-contained network monitoring tool built in Python. It monitors device availability, tracks response times, checks open ports, and alerts when things go down. Designed to be simple to deploy in a homelab or small business environment.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -12,111 +12,95 @@ A lightweight, self-contained network monitoring tool built in Python. It monito
 
 Most network monitoring tools are either too heavy (Nagios, Zabbix) or too simple (a cron job with a ping script). This sits in the middle: enough structure to be useful, light enough to run on a Raspberry Pi or any Linux box without a database.
 
-It was built to demonstrate practical networking and scripting skills: TCP/IP, ICMP, port scanning, logging, alerting, and clean Python architecture.
+**PingGrid configures itself.** On first run it detects your machine, finds your default gateway, sweeps the local subnet for live hosts, and writes a working `config.yaml` for you. No YAML hand-editing required to get started.
 
 ## Features
 
-- **Telegram alerts** (roadmap #1) — push alerts to your phone via bot
-- **Local trend history** (roadmap #1) — append-only JSONL history with uptime summaries, zero cloud
-
-
+- **Auto-configuration** — first run detects your network (gateway, local IP, live hosts) and writes a working config
 - **Device availability monitoring** via ICMP ping
 - **Response time tracking** with historical averages
 - **Port scanning** to verify services are listening (SSH, HTTP, RDP, etc.)
-- **Alerting** via email, webhook, or console output
+- **State-change alerting** — alerts fire when a device goes down or recovers, not every cycle (with optional repeat reminders)
+- **Alerting** via email, webhook, Telegram, or console output
 - **Dashboard** with a simple local web view
-- **Configuration** via a single YAML file
+- **Local trend history** — append-only JSONL history with uptime summaries, zero cloud
 - **Logging** with rotating file handler
-
-## Architecture
-
-```
-network-monitor-dashboard/
-├── monitor.py          # Main monitoring loop
-├── config.yaml         # Device list, thresholds, alert config
-├── alerts.py           # Alert dispatch (email, webhook, console)
-├── dashboard.py        # Flask web dashboard
-├── checker.py          # Ping and port check logic
-├── logger.py           # Rotating log handler
-├── requirements.txt
-└── README.md
-```
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/StefanYasin/network-monitor-dashboard.git
-cd network-monitor-dashboard
+git clone https://github.com/StefanYasin/pinggrid.git
+cd pinggrid
 pip install -r requirements.txt
 
-# Edit config.yaml with your devices
-cp config.yaml.example config.yaml
-
-# Run the monitor
+# Run the monitor - config.yaml is auto-created from your network on first run
 python monitor.py
 
-# View the dashboard
+# View the dashboard in another terminal
 python dashboard.py
 # Open http://localhost:5000
 ```
 
-## Configuration
+That's it. No config file to copy, no IPs to look up. PingGrid finds your gateway and subnet, sweeps for live hosts, and starts monitoring immediately.
+
+### What auto-config creates
 
 ```yaml
-# config.yaml
 devices:
-  - name: "Core Switch"
-    host: "192.168.1.1"
-    ports: [22, 80, 443]
-  - name: "ESXi Host"
-    host: "192.168.1.10"
-    ports: [22, 443, 902]
-  - name: "Gateway"
-    host: "192.168.1.254"
-    ports: [22, 80]
+  - name: Nitro              # your machine, from hostname
+    host: 192.168.2.100
+    ports: []
+  - name: Gateway            # your default gateway, auto-detected
+    host: 192.168.2.1
+    ports: [80, 443]
+  - name: Host 192.168.2.10  # live hosts found by the subnet sweep
+    host: 192.168.2.10
+    ports: []
+```
 
-thresholds:
-  ping_timeout: 3        # seconds
-  port_timeout: 2        # seconds
-  max_response_time: 100 # ms before warning
+Edit `config.yaml` any time to add/remove devices, ports, or alert channels. Rerun with `--reset-config` to rediscover your network from scratch.
 
-alerts:
-  email:
-    enabled: false
-    smtp_server: ""
-    smtp_port: 587
-    username: ""
-    password: ""
-    recipients: []
-  webhook:
-    enabled: false
-    url: ""
-  console:
-    enabled: true
+## CLI
 
-logging:
-  level: "INFO"
-  file: "monitor.log"
-  max_size_mb: 5
-  backup_count: 3
+```bash
+python monitor.py               # run the monitor (auto-configures on first run)
+python monitor.py --once        # run a single check cycle and exit (cron-friendly)
+python monitor.py --reset-config # delete config.yaml and rediscover the network
+```
 
-dashboard:
-  host: "0.0.0.0"
-  port: 5000
-  refresh_seconds: 30
+## Alerts
+
+Alerts are **state-change driven**: a device going down fires `CRITICAL` once, recovery fires `INFO` once, and high latency or closed ports alert only on transition. If a device stays down, a reminder repeats every `alerting.repeat_interval_minutes` (default 15).
+
+Channels are configured under `alerts:` in `config.yaml` — enable console, email (SMTP), webhook, or Telegram. Telegram needs a bot token from [@BotFather](https://t.me/BotFather) and your chat ID (via [@userinfobot](https://t.me/userinfobot)).
+
+## Architecture
+
+```
+pinggrid/
+├── monitor.py          # Main monitoring loop + state-change alerting
+├── autoconfig.py       # Network discovery + first-run config generation
+├── config.yaml         # Auto-created on first run
+├── alerts.py           # Alert dispatch (console, email, webhook, telegram)
+├── dashboard.py        # Flask web dashboard
+├── checker.py          # Ping and port check logic
+├── logger.py           # Rotating log handler
+├── trends.py           # Local JSONL history + uptime summaries
+├── requirements.txt
+└── README.md
 ```
 
 ## Tech Stack
 
-`Python 3.10+` - `PyYAML` - `Flask` - `icmplib` - `python-nmap` - `requests`
+`Python 3.10+` - `PyYAML` - `Flask` - `icmplib` - `requests`
 
 ## What It Demonstrates
 
-- **Networking fundamentals**: ICMP, TCP, port scanning, response time analysis
+- **Networking fundamentals**: ICMP, TCP, port scanning, response time analysis, network discovery
 - **Python architecture**: clean module separation, config-driven design, error handling
-- **Monitoring and alerting**: threshold detection, multi-channel alerting, log rotation
+- **Monitoring and alerting**: state-change detection, threshold logic, multi-channel alerting, log rotation
 - **Web dashboard**: Flask, real-time status, responsive layout
-- **DevOps practices**: config management, logging, health checks
+- **DevOps practices**: auto-configuration, logging, health checks
 
 ## License
 
