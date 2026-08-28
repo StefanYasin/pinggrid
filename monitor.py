@@ -11,12 +11,29 @@ No more re-alerting every cycle for the same outage.
 
 import argparse
 import os
+import threading
 import time
+import webbrowser
 
 from autoconfig import load_config, DEFAULT_CONFIG_PATH
 from checker import check_device
 from alerts import dispatch_alert
 from logger import get_logger
+
+# Shared status cache: monitor thread writes, dashboard thread reads.
+_status_cache = []
+_status_lock = threading.Lock()
+
+
+def set_status_cache(results):
+    global _status_cache
+    with _status_lock:
+        _status_cache = results
+
+
+def get_status_cache():
+    with _status_lock:
+        return list(_status_cache)
 
 
 class AlertState:
@@ -99,9 +116,13 @@ class AlertState:
 
 
 def run_monitor_cycle(config, log, state):
-    """Run one full monitoring cycle across all devices."""
+    """Run one full monitoring cycle across all devices.
+
+    Returns a summary dict: {total, up, down, avg_rtt_ms}.
+    """
     thresholds = config.get("thresholds", {})
     alerts_cfg = config.get("alerts", {})
+    results = []
 
     for device in config.get("devices", []):
         result = check_device(
@@ -109,19 +130,42 @@ def run_monitor_cycle(config, log, state):
             ping_timeout=thresholds.get("ping_timeout", 3),
             port_timeout=thresholds.get("port_timeout", 2),
         )
+        results.append(result)
         alerts = state.evaluate(device, result, thresholds)
 
         for severity, message in alerts:
             dispatch_alert(alerts_cfg, device["name"], message, severity)
 
-        if result["ping"]["alive"]:
-            ports_open = sum(1 for p in result["ports"] if p["open"])
-            total_ports = len(result["ports"])
-            rtt = result["ping"]["rtt_ms"]
-            log.info(f"{device['name']} ({device['host']}): alive, {rtt}ms, "
-                     f"{ports_open}/{total_ports} ports open")
-        else:
-            log.info(f"{device['name']} ({device['host']}): DOWN")
+    set_status_cache(results)
+
+    up = sum(1 for r in results if r["ping"]["alive"])
+    rtts = [r["ping"]["rtt_ms"] for r in results if r["ping"]["rtt_ms"] is not None]
+    avg = round(sum(rtts) / len(rtts), 1) if rtts else None
+    return {"total": len(results), "up": up, "down": len(results) - up,
+            "avg_rtt_ms": avg}
+
+
+def start_dashboard(config):
+    """Start the Flask dashboard in a background thread and open the browser."""
+    import dashboard
+    dashboard.config = config
+    dashboard.set_status_provider(get_status_cache)
+    dash = config.get("dashboard", {})
+    host = dash.get("host", "0.0.0.0")
+    port = dash.get("port", 5000)
+    threading.Thread(
+        target=dashboard.app.run,
+        kwargs={"host": host, "port": port, "debug": False,
+                "use_reloader": False},
+        daemon=True,
+    ).start()
+    url = f"http://localhost:{port}"
+    if dash.get("auto_open", True):
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+    return url
 
 
 def main():
@@ -132,6 +176,8 @@ def main():
                         help="Run a single monitoring cycle and exit")
     parser.add_argument("--config", default=DEFAULT_CONFIG_PATH,
                         help=f"Config file path (default: {DEFAULT_CONFIG_PATH})")
+    parser.add_argument("--no-dashboard", action="store_true",
+                        help="Run headless (no web dashboard, no browser)")
     args = parser.parse_args()
 
     if args.reset_config and os.path.exists(args.config):
@@ -156,13 +202,19 @@ def main():
     repeat_min = config.get("alerting", {}).get("repeat_interval_minutes")
     state = AlertState(repeat_interval_s=repeat_min * 60 if repeat_min else None)
     interval = config.get("monitor", {}).get("interval_seconds", 30)
-    dashboard_port = config.get("dashboard", {}).get("port", 5000)
-    log.info(f"Interval: {interval}s | Dashboard: http://localhost:{dashboard_port}"
-             f" (run: python dashboard.py)")
+
+    if not args.no_dashboard and not args.once:
+        url = start_dashboard(config)
+        log.info(f"Dashboard: {url}")
+
+    log.info(f"Interval: {interval}s")
 
     try:
         while True:
-            run_monitor_cycle(config, log, state)
+            summary = run_monitor_cycle(config, log, state)
+            avg = f", avg {summary['avg_rtt_ms']}ms" if summary["avg_rtt_ms"] is not None else ""
+            log.info(f"Cycle: {summary['up']}/{summary['total']} up, "
+                     f"{summary['down']} down{avg}")
             if args.once:
                 log.info("Single cycle complete")
                 break

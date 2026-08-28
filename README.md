@@ -33,15 +33,15 @@ git clone https://github.com/StefanYasin/pinggrid.git
 cd pinggrid
 pip install -r requirements.txt
 
-# Run the monitor - config.yaml is auto-created from your network on first run
+# Run the monitor - config.yaml is auto-created from your network on first
+# run, and the web dashboard starts at http://localhost:5000 in the same
+# process (your browser opens automatically).
 python monitor.py
-
-# View the dashboard in another terminal
-python dashboard.py
-# Open http://localhost:5000
 ```
 
-That's it. No config file to copy, no IPs to look up. PingGrid finds your gateway and subnet, sweeps for live hosts, and starts monitoring immediately.
+That's it. One command: PingGrid finds your gateway and subnet, sweeps for
+live hosts, starts monitoring, and opens the dashboard. The dashboard shows
+live status from the monitor's cached results - no per-request pings.
 
 ### What auto-config creates
 
@@ -58,14 +58,16 @@ devices:
     ports: []
 ```
 
-Edit `config.yaml` any time to add/remove devices, ports, or alert channels. Rerun with `--reset-config` to rediscover your network from scratch.
+Edit `config.yaml` any time to add/remove devices, ports, or alert channels. Rerun with `--reset-config` to rediscover your network from scratch. An unedited copy of the example config is detected and replaced automatically (backed up to `config.yaml.bak`).
 
 ## CLI
 
 ```bash
-python monitor.py               # run the monitor (auto-configures on first run)
-python monitor.py --once        # run a single check cycle and exit (cron-friendly)
-python monitor.py --reset-config # delete config.yaml and rediscover the network
+python monitor.py                # monitor + dashboard, browser auto-opens
+python monitor.py --no-dashboard # headless: terminal only (servers/cron)
+python monitor.py --once         # single check cycle and exit (cron-friendly)
+python monitor.py --reset-config # delete config.yaml and rediscover
+python dashboard.py              # standalone dashboard (no monitor attached)
 ```
 
 ## Alerts
@@ -78,11 +80,11 @@ Channels are configured under `alerts:` in `config.yaml` — enable console, ema
 
 ```
 pinggrid/
-├── monitor.py          # Main monitoring loop + state-change alerting
+├── monitor.py          # Main loop + state-change alerting + embedded dashboard
 ├── autoconfig.py       # Network discovery + first-run config generation
 ├── config.yaml         # Auto-created on first run
 ├── alerts.py           # Alert dispatch (console, email, webhook, telegram)
-├── dashboard.py        # Flask web dashboard
+├── dashboard.py        # Flask web dashboard (embedded in monitor, or standalone)
 ├── checker.py          # Ping and port check logic
 ├── logger.py           # Rotating log handler
 ├── trends.py           # Local JSONL history + uptime summaries

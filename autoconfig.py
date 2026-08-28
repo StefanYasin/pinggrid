@@ -151,7 +151,8 @@ def build_default_config(devices):
             "level": "INFO", "file": "monitor.log",
             "max_size_mb": 5, "backup_count": 3,
         },
-        "dashboard": {"host": "0.0.0.0", "port": 5000, "refresh_seconds": 30},
+        "dashboard": {"host": "0.0.0.0", "port": 5000, "refresh_seconds": 30,
+                      "auto_open": True},
     }
 
 

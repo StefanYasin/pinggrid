@@ -196,3 +196,64 @@ def test_port_transition_alerts():
     a = state.evaluate(dev, _result(ports=[{"port": 80, "open": False, "error": "refused"}]), thr, now=2)
     assert any("Port 80" in msg for sev, msg in a)
     assert state.evaluate(dev, _result(ports=[{"port": 80, "open": False, "error": "refused"}]), thr, now=3) == []
+
+
+# ---------- monitor cycle summary + dashboard ----------
+
+class _NullLog:
+    def info(self, *a, **k): pass
+    def warning(self, *a, **k): pass
+    def error(self, *a, **k): pass
+
+
+def test_cycle_summary_counts(monkeypatch):
+    import monitor
+    devices = [
+        {"name": "A", "host": "10.0.0.1", "ports": []},
+        {"name": "B", "host": "10.0.0.2", "ports": []},
+        {"name": "C", "host": "10.0.0.3", "ports": []},
+    ]
+    config = {"devices": devices, "thresholds": {}, "alerts": {}}
+
+    def fake_check(device, **kw):
+        alive = device["host"] != "10.0.0.2"
+        return {
+            "name": device["name"], "host": device["host"],
+            "ping": {"alive": alive, "rtt_ms": 12 if alive else None,
+                     "error": None if alive else "timeout"},
+            "ports": [], "timestamp": 0,
+        }
+    monkeypatch.setattr(monitor, "check_device", fake_check)
+    state = monitor.AlertState()
+    summary = monitor.run_monitor_cycle(config, _NullLog(), state)
+    assert summary == {"total": 3, "up": 2, "down": 1, "avg_rtt_ms": 12.0}
+
+    # cache updated for the dashboard to read
+    cache = monitor.get_status_cache()
+    assert len(cache) == 3
+    assert cache[1]["ping"]["alive"] is False
+
+
+def test_dashboard_renders_with_provider():
+    import dashboard
+    devices = [
+        {"name": "Nitro", "host": "192.168.2.100",
+         "ping": {"alive": True, "rtt_ms": 1.2, "error": None},
+         "ports": [{"port": 80, "open": True, "error": None}]},
+        {"name": "Broken", "host": "192.168.2.99",
+         "ping": {"alive": False, "rtt_ms": None, "error": "timeout"},
+         "ports": []},
+    ]
+    dashboard.config = {"devices": devices, "dashboard": {"refresh_seconds": 30}}
+    dashboard.set_status_provider(lambda: devices)
+
+    client = dashboard.app.test_client()
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "PingGrid" in body
+    assert "Nitro" in body and "Broken" in body
+    assert "2</b> up" in body.replace(" ", "") or "2</b>" in body
+    assert "1</b> down" in body.replace(" ", "") or "1</b>" in body
+
+    dashboard.set_status_provider(None)
