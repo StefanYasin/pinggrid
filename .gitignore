@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 config.yaml
+config.yaml.bak
+*.bak
 monitor.log
 .venv/
 .env
