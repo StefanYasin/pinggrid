@@ -18,6 +18,42 @@ import yaml
 from icmplib import ping
 
 DEFAULT_CONFIG_PATH = "config.yaml"
+DEFAULT_CONFIG_EXAMPLE = "config.yaml.example"
+
+# The original example shipped with these fake devices - no real network has
+# all three at these exact IPs. A config containing them is an unedited
+# template copy (old or new version), so treat it as no config at all.
+EXAMPLE_DEVICE_FINGERPRINTS = {
+    ("Core Switch", "192.168.1.1"),
+    ("ESXi Host", "192.168.1.10"),
+    ("Gateway", "192.168.1.254"),
+}
+
+
+def _is_untouched_example(path):
+    """True if config.yaml is an unedited copy of an example template.
+
+    Two signals: byte-identical to the current config.yaml.example, or it
+    contains the original example's fake devices (Core Switch 192.168.1.1,
+    ESXi Host 192.168.1.10, Gateway 192.168.1.254). The fake 192.168.1.x
+    hosts make every device show DOWN, so treat them as no config at all.
+    """
+    try:
+        def _normalize(p):
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                return "".join(line.strip() for line in f if line.strip())
+
+        if os.path.exists(DEFAULT_CONFIG_EXAMPLE) and \
+                _normalize(path) == _normalize(DEFAULT_CONFIG_EXAMPLE):
+            return True
+
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        devices = cfg.get("devices", [])
+        fingerprints = {(d.get("name", ""), d.get("host", "")) for d in devices}
+        return EXAMPLE_DEVICE_FINGERPRINTS.issubset(fingerprints)
+    except (OSError, yaml.YAMLError, AttributeError):
+        return False
 
 
 def detect_local_ip():
@@ -154,10 +190,21 @@ def auto_configure(path=DEFAULT_CONFIG_PATH, max_discovered=10):
 def load_config(path=DEFAULT_CONFIG_PATH):
     """
     Load config.yaml; on first run, auto-discover the network and create it.
+
+    An unedited copy of config.yaml.example is treated as missing: it only
+    contains the example 192.168.1.x hosts, which would show every device
+    as DOWN. It is backed up and the network is rediscovered instead.
     """
     if os.path.exists(path):
-        with open(path, "r") as f:
-            return yaml.safe_load(f)
+        if _is_untouched_example(path):
+            backup = f"{path}.bak"
+            os.replace(path, backup)
+            print(f"config.yaml is just a copy of the example (no real devices) - "
+                  f"backed it up to {backup}", flush=True)
+            print("Rediscovering your network...\n", flush=True)
+        else:
+            with open(path, "r") as f:
+                return yaml.safe_load(f)
 
     print(f"No config found at {path} - detecting your network...", flush=True)
     config = auto_configure(path)

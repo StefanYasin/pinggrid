@@ -67,6 +67,63 @@ def test_load_config_reads_existing(tmp_path):
     assert cfg["devices"][0]["name"] == "Custom"
 
 
+# ---------- template-copy detection (the 'everything DOWN' trap) ----------
+
+def test_untouched_example_detected_byte_identical(tmp_path, monkeypatch):
+    ex = tmp_path / "config.yaml.example"
+    ex.write_text("devices:\n  - name: A\n    host: 1.1.1.1\n")
+    monkeypatch.setattr(autoconfig, "DEFAULT_CONFIG_EXAMPLE", str(ex))
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("devices:\n  - name: A\n    host: 1.1.1.1\n")
+    assert autoconfig._is_untouched_example(str(cfg)) is True
+
+
+def test_old_example_copy_detected_by_fingerprint(tmp_path):
+    # Stefan's case: config.yaml was copied from the ORIGINAL example,
+    # so it is not byte-identical to the current example file, but it
+    # still contains the fake 192.168.1.x devices.
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        "devices:\n"
+        "  - name: Core Switch\n    host: 192.168.1.1\n    ports: [22, 80, 443]\n"
+        "  - name: ESXi Host\n    host: 192.168.1.10\n    ports: [22, 443, 902]\n"
+        "  - name: Gateway\n    host: 192.168.1.254\n    ports: [22, 80]\n"
+    )
+    assert autoconfig._is_untouched_example(str(cfg)) is True
+
+
+def test_real_config_not_mistaken_for_template(tmp_path):
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        "devices:\n"
+        "  - name: Core Switch\n    host: 192.168.1.1\n    ports: []\n"
+        "  - name: Real Server\n    host: 10.0.0.5\n    ports: [22]\n"
+    )
+    # Only the Core Switch fingerprint is present, not all three -> real config.
+    assert autoconfig._is_untouched_example(str(cfg)) is False
+
+
+def test_load_config_backs_up_template_and_redisovers(tmp_path, monkeypatch):
+    monkeypatch.setattr(autoconfig, "detect_local_ip", lambda: "192.168.2.100")
+    monkeypatch.setattr(autoconfig, "detect_gateway", lambda: "192.168.2.1")
+    monkeypatch.setattr(autoconfig, "ping_sweep", lambda *a, **k: [])
+
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "devices:\n"
+        "  - name: Core Switch\n    host: 192.168.1.1\n    ports: []\n"
+        "  - name: ESXi Host\n    host: 192.168.1.10\n    ports: []\n"
+        "  - name: Gateway\n    host: 192.168.1.254\n    ports: []\n"
+    )
+
+    cfg = autoconfig.load_config(str(path))
+    assert (tmp_path / "config.yaml.bak").exists()          # backed up, not lost
+    hosts = {d["host"] for d in cfg["devices"]}
+    assert "192.168.2.100" in hosts                          # real machine
+    assert "192.168.2.1" in hosts                            # real gateway
+    assert "192.168.1.1" not in hosts                        # fake device gone
+
+
 # ---------- AlertState: transition-based dedup ----------
 
 def _device(name="gw"):

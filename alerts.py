@@ -2,6 +2,7 @@
 Alert dispatch module - sends alerts via email, webhook, or console.
 """
 
+import logging
 import smtplib
 import requests
 from email.mime.text import MIMEText
@@ -11,8 +12,9 @@ log = get_logger(__name__)
 
 
 def send_console_alert(device_name, message, severity="WARNING"):
-    """Log alert to console (honored only when console alerts are enabled)."""
-    log.warning(f"[{severity}] {device_name}: {message}")
+    """Log alert to console at its own severity (honored when enabled)."""
+    level = getattr(logging, severity.upper(), logging.WARNING)
+    log.log(level, f"{device_name}: {message}")
 
 
 def send_email_alert(config, device_name, message):

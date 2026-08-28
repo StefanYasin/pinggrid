@@ -121,7 +121,7 @@ def run_monitor_cycle(config, log, state):
             log.info(f"{device['name']} ({device['host']}): alive, {rtt}ms, "
                      f"{ports_open}/{total_ports} ports open")
         else:
-            log.warning(f"{device['name']} ({device['host']}): DOWN")
+            log.info(f"{device['name']} ({device['host']}): DOWN")
 
 
 def main():
