@@ -1,3 +1,13 @@
+<div align="center">
+
+[![Stars](https://img.shields.io/github/stars/StefanYasin/pinggrid?style=flat)]
+[![License](https://img.shields.io/github/license/StefanYasin/pinggrid?style=flat)]
+[![Issues](https://img.shields.io/github/issues/StefanYasin/pinggrid?style=flat)]
+[![Last commit](https://img.shields.io/github/last-commit/StefanYasin/pinggrid?style=flat)]
+[![Language](https://img.shields.io/github/languages/top/StefanYasin/pinggrid?style=flat)]
+
+</div>
+
 # PingGrid
 
 A lightweight, self-contained network monitoring tool built in Python. It monitors device availability, tracks response times, checks open ports, and alerts when things go down. Designed to be simple to deploy in a homelab or small business environment.
