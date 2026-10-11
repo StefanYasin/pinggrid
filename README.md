@@ -122,3 +122,7 @@ MIT
 
 **Stefan Yasin** - Technical Operations & Customer Success
 [LinkedIn](https://linkedin.com/in/stefanyasin) - [GitHub](https://github.com/stefanyasin)
+
+[Portfolio](https://stefanyasin.github.io/) · [LinkedIn](https://www.linkedin.com/in/stefanyasin/)
+
+[Buy me a coffee](https://buymeacoffee.com/stefanthepro)
