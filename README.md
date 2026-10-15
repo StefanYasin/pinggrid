@@ -6,6 +6,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/StefanYasin/pinggrid?style=flat)]
 [![Language](https://img.shields.io/github/languages/top/StefanYasin/pinggrid?style=flat)]
 
+[![Tests](https://img.shields.io/github/actions/workflow/status/StefanYasin/pinggrid/ci.yml?style=flat&label=tests)]
 </div>
 
 # PingGrid
