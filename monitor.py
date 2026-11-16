@@ -204,6 +204,8 @@ def main():
     interval = config.get("monitor", {}).get("interval_seconds", 30)
 
     if not args.no_dashboard and not args.once:
+        import dashboard
+        dashboard.CONFIG_PATH = args.config
         url = start_dashboard(config)
         log.info(f"Dashboard: {url}")
 

@@ -106,6 +106,64 @@ def _ping_host(host, timeout):
         return False
 
 
+
+
+def _dns_name(ip, timeout=0.6):
+    """Reverse DNS name for an IP, short hostname only."""
+    old = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(timeout)
+    try:
+        name = socket.gethostbyaddr(ip)[0]
+        return name.split(".")[0]
+    except Exception:
+        return None
+    finally:
+        socket.setdefaulttimeout(old)
+
+
+def _netbios_name(ip):
+    """NetBIOS name for an IP via nbtstat (Windows)."""
+    out = subprocess.run(
+        ["nbtstat", "-A", ip],
+        capture_output=True, text=True, timeout=3,
+    ).stdout
+    m = re.search(r"^\s*(\S+)\s+<00>\s+UNIQUE", out, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+def resolve_hostnames(ips, workers=8):
+    """Best-effort friendly names for a list of IPs (parallel).
+
+    Reverse DNS first; on Windows, NetBIOS lookup for any that did not
+    answer DNS. Returns {ip: name}. Never raises: unknown IPs are simply
+    absent from the result.
+    """
+    names = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(_dns_name, ip): ip for ip in ips}
+        for fut in as_completed(futures):
+            ip = futures[fut]
+            try:
+                name = fut.result()
+                if name:
+                    names[ip] = name
+            except Exception:
+                pass
+    if sys.platform == "win32":
+        unknown = [ip for ip in ips if ip not in names]
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(_netbios_name, ip): ip for ip in unknown}
+            for fut in as_completed(futures):
+                ip = futures[fut]
+                try:
+                    name = fut.result()
+                    if name:
+                        names[ip] = name
+                except Exception:
+                    pass
+    return names
+
+
 def ping_sweep(subnet, timeout=0.3, max_hosts=16, workers=64):
     """Parallel ICMP sweep of a subnet; returns live host IPs (capped)."""
     net = ipaddress.ip_network(subnet, strict=False)
@@ -176,9 +234,10 @@ def auto_configure(path=DEFAULT_CONFIG_PATH, max_discovered=10):
         if ipaddress.ip_address(local_ip).is_private:
             subnet = str(ipaddress.ip_network(f"{local_ip}/24", strict=False))
             known = {local_ip, gateway}
-            for ip in ping_sweep(subnet, max_hosts=max_discovered):
-                if ip not in known:
-                    devices.append({"name": f"Host {ip}", "host": ip, "ports": []})
+            found = [ip for ip in ping_sweep(subnet, max_hosts=max_discovered) if ip not in known]
+            names = resolve_hostnames(found)
+            for ip in found:
+                devices.append({"name": names.get(ip, f"Host {ip}"), "host": ip, "ports": []})
     except Exception:
         pass
 
