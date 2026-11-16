@@ -28,6 +28,7 @@ Most network monitoring tools are either too heavy (Nagios, Zabbix) or too simpl
 ## Features
 
 - **Auto-configuration** — first run detects your network (gateway, local IP, live hosts) and writes a working config
+- **Friendly names** — discovered devices get real names via reverse DNS and NetBIOS when they answer; rename any device right on the dashboard (saved to config.yaml)
 - **Device availability monitoring** via ICMP ping
 - **Response time tracking** with historical averages
 - **Port scanning** to verify services are listening (SSH, HTTP, RDP, etc.)
@@ -114,6 +115,36 @@ pinggrid/
 - **Monitoring and alerting**: state-change detection, threshold logic, multi-channel alerting, log rotation
 - **Web dashboard**: Flask, real-time status, responsive layout
 - **DevOps practices**: auto-configuration, logging, health checks
+
+## FAQ
+
+**Why do some devices show as "Host 192.168.x.x"?**
+
+Discovery found them by IP sweep but they did not answer a name lookup (reverse DNS or NetBIOS). Click the pencil button on the dashboard card to give them a name you recognize. Names are saved to `config.yaml`.
+
+**Does the dashboard need the monitor running?**
+
+Yes: `python monitor.py` starts both the monitor and the dashboard in one process. `python dashboard.py` runs a standalone view if you want the UI without the loop.
+
+**Can I monitor devices on other subnets?**
+
+Yes. Add them to the `devices:` list in `config.yaml` by IP or hostname, then restart. Discovery only sweeps your local subnet.
+
+**Why am I not getting alerts?**
+
+Alerts fire on state change: a device must go down after being up, or recover after being down. Also check `alerts.console.enabled` in `config.yaml` and any channel settings you want (telegram, webhook, email).
+
+**Do I need admin rights?**
+
+No. ICMP and TCP checks work from a normal terminal on Windows and Linux. If your network blocks ping, you can still monitor ports.
+
+**How do I run it headless on a server?**
+
+`python monitor.py --no-dashboard` for terminal-only, or `python monitor.py --once` for cron-friendly single checks.
+
+**Does PingGrid send my data anywhere?**
+
+No. Everything stays on the machine it runs on. Only alert channels you explicitly enable (telegram, webhook, email) make outbound requests.
 
 ## License
 
