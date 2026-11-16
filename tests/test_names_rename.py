@@ -43,6 +43,9 @@ def test_netbios_name_no_match(monkeypatch):
 
 
 def test_resolve_hostnames_merges_dns_and_netbios(monkeypatch):
+    # Pin to Windows so the NetBIOS pass is exercised deterministically
+    # (on Linux CI sys.platform != win32 would silently skip it).
+    monkeypatch.setattr(autoconfig.sys, "platform", "win32")
     monkeypatch.setattr(autoconfig, "_dns_name", lambda ip: "dns-name" if ip == "10.0.0.2" else None)
     monkeypatch.setattr(autoconfig, "_netbios_name", lambda ip: "nb-name" if ip == "10.0.0.3" else None)
     names = autoconfig.resolve_hostnames(["10.0.0.2", "10.0.0.3", "10.0.0.4"])
