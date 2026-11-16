@@ -14,8 +14,10 @@ import os
 import threading
 import time
 import webbrowser
+from collections import deque
 
 from autoconfig import load_config, DEFAULT_CONFIG_PATH
+from trends import TrendStore
 from checker import check_device
 from alerts import dispatch_alert
 from logger import get_logger
@@ -23,6 +25,17 @@ from logger import get_logger
 # Shared status cache: monitor thread writes, dashboard thread reads.
 _status_cache = []
 _status_lock = threading.Lock()
+
+# Per-host heartbeat history (last 50 checks) for the dashboard history strip.
+_history = {}          # host -> deque of bool (alive?)
+_history_lock = threading.Lock()
+
+
+def _append_history(host, alive):
+    with _history_lock:
+        hist = _history.setdefault(host, deque(maxlen=50))
+        hist.append(bool(alive))
+        return list(hist)
 
 
 def set_status_cache(results):
@@ -115,10 +128,15 @@ class AlertState:
         return alerts
 
 
-def run_monitor_cycle(config, log, state):
+def run_monitor_cycle(config, log, state, trend_store=None):
     """Run one full monitoring cycle across all devices.
 
     Returns a summary dict: {total, up, down, avg_rtt_ms}.
+
+    Devices flagged maintenance or paused in config are still checked (so
+    the dashboard stays honest) but never dispatch alerts. Each result
+    carries its maintenance/paused flags and the last 50 checks as
+    `history` for the dashboard heartbeat strip.
     """
     thresholds = config.get("thresholds", {})
     alerts_cfg = config.get("alerts", {})
@@ -130,11 +148,25 @@ def run_monitor_cycle(config, log, state):
             ping_timeout=thresholds.get("ping_timeout", 3),
             port_timeout=thresholds.get("port_timeout", 2),
         )
-        results.append(result)
+        suppress = bool(device.get("maintenance") or device.get("paused"))
         alerts = state.evaluate(device, result, thresholds)
 
-        for severity, message in alerts:
-            dispatch_alert(alerts_cfg, device["name"], message, severity)
+        if not suppress:
+            for severity, message in alerts:
+                dispatch_alert(alerts_cfg, device["name"], message, severity)
+
+        result["maintenance"] = bool(device.get("maintenance"))
+        result["paused"] = bool(device.get("paused"))
+        result["history"] = _append_history(result["host"], result["ping"]["alive"])
+
+        if trend_store is not None:
+            trend_store.record(
+                device["name"],
+                "up" if result["ping"]["alive"] else "down",
+                result["ping"]["rtt_ms"],
+            )
+
+        results.append(result)
 
     set_status_cache(results)
 
@@ -211,9 +243,11 @@ def main():
 
     log.info(f"Interval: {interval}s")
 
+    trend_store = TrendStore("history.jsonl")
+
     try:
         while True:
-            summary = run_monitor_cycle(config, log, state)
+            summary = run_monitor_cycle(config, log, state, trend_store=trend_store)
             avg = f", avg {summary['avg_rtt_ms']}ms" if summary["avg_rtt_ms"] is not None else ""
             log.info(f"Cycle: {summary['up']}/{summary['total']} up, "
                      f"{summary['down']} down{avg}")

@@ -6,3 +6,4 @@ config.yaml.bak
 monitor.log
 .venv/
 .env
+history.jsonl
