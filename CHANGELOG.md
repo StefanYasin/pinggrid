@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-11-16
+
+### Added
+
+- Heartbeat history strip on every device card (last 50 checks, green/red bars)
+- Global status banner: All systems operational / N of M devices down
+- Search, filter (all/down/up/maintenance), and sort (name/status/latency) controls
+- Light/dark theme toggle (persisted per browser)
+- Maintenance and paused device states: checked but silent, blue/grey pills
+- Durable JSONL trend recording wired into the monitor loop (history.jsonl)
+
 ## [1.1.0] - 2026-10-15
 
 ### Added

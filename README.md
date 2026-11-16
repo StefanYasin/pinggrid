@@ -29,6 +29,10 @@ Most network monitoring tools are either too heavy (Nagios, Zabbix) or too simpl
 
 - **Auto-configuration** — first run detects your network (gateway, local IP, live hosts) and writes a working config
 - **Friendly names** — discovered devices get real names via reverse DNS and NetBIOS when they answer; rename any device right on the dashboard (saved to config.yaml)
+- **Live heartbeat history** — every card shows the last 50 checks as a green/red strip, so you see flapping at a glance
+- **Search, filter, sort** — find any device by name, IP or port; filter by state; sort by latency
+- **Maintenance windows** — flag a device `maintenance: true` in config.yaml to suppress alerts during planned work
+- **Light/dark theme** — toggle on the dashboard, remembered per browser
 - **Device availability monitoring** via ICMP ping
 - **Response time tracking** with historical averages
 - **Port scanning** to verify services are listening (SSH, HTTP, RDP, etc.)
