@@ -94,6 +94,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                   border-radius: 4px; cursor: pointer; font-size: 11px;
                   padding: 1px 6px; margin-left: 8px; vertical-align: middle; }
         .rename:hover { color: var(--accent); border-color: var(--accent); }
+        .card { cursor: pointer; }
+        .group { margin-bottom: 18px; }
+        .group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .group-name { font-size: 13px; font-weight: 600; }
+        .group-count { color: var(--muted); font-size: 12px; }
+        .drawer { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
+        .spark { display: block; }
+        .drawer-stats { color: var(--muted); font-size: 11px; margin: 6px 0; }
+        .mute { background: none; border: 1px solid var(--border); color: var(--muted);
+                border-radius: 4px; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+        .mute:hover { color: var(--amber); border-color: var(--amber); }
         .help { margin-top: 28px; background: var(--card); border: 1px solid var(--border);
                 border-radius: 8px; padding: 14px 18px; }
         .help summary { cursor: pointer; color: var(--muted); font-size: 13px; }
@@ -135,11 +146,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span class="pill"><b>{{ total }}</b> devices</span>
     </div>
 
-    <div class="grid" id="grid">
-    {% for device in devices %}
+    {% macro card(device) %}
         {% set state = 'paused' if device.paused else ('maint' if device.maintenance else ('up' if device.ping.alive else 'down')) %}
         <div class="card" data-name="{{ device.name|lower }}" data-host="{{ device.host }}"
-             data-status="{{ state }}" data-rtt="{{ device.ping.rtt_ms or 999999 }}">
+             data-status="{{ state }}" data-rtt="{{ device.ping.rtt_ms or 999999 }}"
+             data-hist="{{ device.hist_str }}" data-rtts="{{ device.rtts_str }}">
             <h3><span class="devname">{{ device.name }}</span>
                 <button class="rename" data-host="{{ device.host }}" title="Rename this device">&#9998;</button>
                 <span class="status {{ state }}">
@@ -154,10 +165,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="bars" title="Last checks: green up, red down">
                 {% for alive in device.history or [] %}<span class="bar {{ 'up' if alive else 'down' }}"></span>{% endfor %}
             </div>
-            <div class="bars-label">last {{ device.history|length if device.history else 0 }} checks</div>
+            <div class="bars-label">last {{ device.history|length if device.history else 0 }} checks &middot; click card for details</div>
+            <div class="drawer" style="display:none">
+                <svg class="spark" width="260" height="40"></svg>
+                <div class="drawer-stats"></div>
+                <button class="mute" data-host="{{ device.host }}" data-enable="{{ '1' if device.maintenance else '0' }}">
+                    {{ 'Unmute alerts' if device.maintenance else 'Mute alerts (maintenance)' }}</button>
+            </div>
         </div>
-    {% endfor %}
-    </div>
+    {% endmacro %}
+
+    {% if groups %}
+        {% for g in groups %}
+        <div class="group">
+            <div class="group-head">
+                <span class="group-name">{{ g.name }}</span>
+                <span class="status {{ g.worst }}">{{ g.worst|upper }}</span>
+                <span class="group-count">{{ g.up }} / {{ g.total }} up</span>
+            </div>
+            <div class="grid">
+            {% for device in g.devices %}
+                {{ card(device) }}
+            {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="grid" id="grid">
+        {% for device in devices %}
+            {{ card(device) }}
+        {% endfor %}
+        </div>
+    {% endif %}
     <div id="empty" style="display:none; color: var(--muted); font-size: 13px;">No devices match.</div>
 
     <details class="help">
@@ -204,18 +243,69 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     function applySort() {
         var s = document.getElementById("sort").value;
-        var grid = document.getElementById("grid");
-        var cards = Array.prototype.slice.call(document.querySelectorAll("#grid .card"));
-        cards.sort(function(a, b) {
-            if (s === "latency") { return parseFloat(a.getAttribute("data-rtt")) - parseFloat(b.getAttribute("data-rtt")); }
-            if (s === "status") {
-                var order = {up: 0, maint: 1, paused: 2, down: 3};
-                return (order[a.getAttribute("data-status")] || 4) - (order[b.getAttribute("data-status")] || 4);
-            }
-            return a.getAttribute("data-name").localeCompare(b.getAttribute("data-name"));
+        document.querySelectorAll(".grid").forEach(function(grid) {
+            var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
+            cards.sort(function(a, b) {
+                if (s === "latency") { return parseFloat(a.getAttribute("data-rtt")) - parseFloat(b.getAttribute("data-rtt")); }
+                if (s === "status") {
+                    var order = {up: 0, maint: 1, paused: 2, down: 3};
+                    return (order[a.getAttribute("data-status")] || 4) - (order[b.getAttribute("data-status")] || 4);
+                }
+                return a.getAttribute("data-name").localeCompare(b.getAttribute("data-name"));
+            });
+            cards.forEach(function(c) { grid.appendChild(c); });
         });
-        cards.forEach(function(c) { grid.appendChild(c); });
     }
+
+    function fillDrawer(card) {
+        var svg = card.querySelector(".spark");
+        var stats = card.querySelector(".drawer-stats");
+        var rtts = (card.getAttribute("data-rtts") || "").split(",").filter(Boolean).map(Number);
+        var hist = (card.getAttribute("data-hist") || "").split(",").filter(Boolean);
+        if (rtts.length > 1 && svg) {
+            var w = 260, h = 40, pad = 2;
+            var max = Math.max.apply(null, rtts), min = Math.min.apply(null, rtts);
+            var range = (max - min) || 1;
+            var pts = rtts.map(function(v, i) {
+                var x = pad + i * (w - 2 * pad) / (rtts.length - 1);
+                var y = h - pad - (v - min) / range * (h - 2 * pad);
+                return x.toFixed(1) + "," + y.toFixed(1);
+            });
+            svg.innerHTML = '<polyline points="' + pts.join(" ") + '" fill="none" stroke="var(--accent)" stroke-width="1.5"/>';
+            stats.textContent = "latency: min " + min + "ms / max " + max + "ms (last " + rtts.length + " checks)";
+        }
+        var up = hist.filter(function(x) { return x === "1"; }).length;
+        if (hist.length) {
+            stats.textContent += " | uptime since start: " + (100 * up / hist.length).toFixed(1) + "%";
+        }
+    }
+
+    document.addEventListener("click", function(e) {
+        if (e.target.closest("button")) { return; }
+        var card = e.target.closest(".card");
+        if (!card) { return; }
+        var drawer = card.querySelector(".drawer");
+        if (!drawer) { return; }
+        var opening = drawer.style.display === "none";
+        drawer.style.display = opening ? "" : "none";
+        if (opening) { fillDrawer(card); }
+    });
+
+    document.querySelectorAll("button.mute").forEach(function(btn) {
+        btn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            var host = btn.getAttribute("data-host");
+            var enable = btn.getAttribute("data-enable") === "1" ? "0" : "1";
+            fetch("/maintenance", {
+                method: "POST",
+                headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                body: "host=" + encodeURIComponent(host) + "&enable=" + enable
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(j) { if (j.ok) { location.reload(); } else { alert(j.error || "Failed"); } })
+            .catch(function() { alert("Failed: dashboard not reachable"); });
+        });
+    });
     document.getElementById("search").addEventListener("input", applyControls);
     document.getElementById("filter").addEventListener("change", applyControls);
     document.getElementById("sort").addEventListener("change", applySort);
@@ -267,21 +357,87 @@ def get_device_status(cfg):
     return results
 
 
+def _state_of(device):
+    """Discrete state for one device: up / down / maint / paused."""
+    if device.get("paused"):
+        return "paused"
+    if device.get("maintenance"):
+        return "maint"
+    return "up" if device["ping"]["alive"] else "down"
+
+
+_STATE_RANK = {"up": 0, "paused": 1, "maint": 2, "down": 3}
+
+
+def _group_devices(devices):
+    """Group devices by their `group` config field, in first-seen order.
+
+    Returns a list of {"name", "devices", "worst", "up", "total"} or None
+    when no device declares a group (dashboard stays flat).
+    """
+    grouped, order = {}, []
+    for device in devices:
+        group = (device.get("group") or "").strip()
+        if not group:
+            continue
+        grouped.setdefault(group, []).append(device)
+        if group not in order:
+            order.append(group)
+    if not grouped:
+        return None
+    out = []
+    for name in order:
+        members = grouped[name]
+        states = [_STATE_RANK[_state_of(d)] for d in members]
+        worst = max(states)
+        out.append({
+            "name": name,
+            "devices": members,
+            "worst": ["up", "paused", "maint", "down"][worst],
+            "up": sum(1 for d in members if _state_of(d) == "up"),
+            "total": len(members),
+        })
+    return out
+
+
 @app.route("/")
 def index():
     cfg = config or {}
     devices = get_device_status(cfg)
+    for device in devices:
+        device["hist_str"] = ",".join("1" if x else "0" for x in (device.get("history") or []))
+        device["rtts_str"] = ",".join("" if r is None else str(r) for r in (device.get("rtt_history") or []))
     up = sum(1 for d in devices if d["ping"]["alive"] and not d.get("paused"))
     down = sum(1 for d in devices if not d["ping"]["alive"] and not d.get("paused") and not d.get("maintenance"))
     return render_template_string(
         HTML_TEMPLATE,
         devices=devices,
+        groups=_group_devices(devices),
         up=up,
         down=down,
         total=len(devices),
         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         refresh=cfg.get("dashboard", {}).get("refresh_seconds", 30),
     )
+
+
+@app.route("/maintenance", methods=["POST"])
+def maintenance():
+    """Toggle the maintenance flag on a device; persists to config.yaml."""
+    cfg = config or {}
+    host = (request.form.get("host") or "").strip()
+    enable = (request.form.get("enable") or "0").strip() == "1"
+    target = next((dev for dev in cfg.get("devices", []) if dev.get("host") == host), None)
+    if target is None:
+        return jsonify({"ok": False, "error": f"no device with host {host}"}), 404
+    target["maintenance"] = enable
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+    except OSError as e:
+        return jsonify({"ok": False, "error": f"could not save config: {e}"}), 500
+    log.info(f"{host}: maintenance {'on' if enable else 'off'} (saved to {CONFIG_PATH})")
+    return jsonify({"ok": True, "maintenance": enable})
 
 
 @app.route("/rename", methods=["POST"])

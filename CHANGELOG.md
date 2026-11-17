@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-11-16
+
+### Added
+
+- Device groups (config `group:` field) with worst-case pill per group
+- Detail drawer per card: latency sparkline + uptime since start
+- Mute/unmute alerts per device (maintenance toggle, persisted)
+
 ## [1.2.0] - 2026-11-16
 
 ### Added
