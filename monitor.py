@@ -26,16 +26,20 @@ from logger import get_logger
 _status_cache = []
 _status_lock = threading.Lock()
 
-# Per-host heartbeat history (last 50 checks) for the dashboard history strip.
+# Per-host heartbeat history (last 50 checks) for the dashboard history strip,
+# plus parallel RTT history for the latency sparkline in the detail drawer.
 _history = {}          # host -> deque of bool (alive?)
+_rtt_history = {}      # host -> deque of float|None (rtt ms)
 _history_lock = threading.Lock()
 
 
-def _append_history(host, alive):
+def _append_history(host, alive, rtt_ms=None):
     with _history_lock:
         hist = _history.setdefault(host, deque(maxlen=50))
         hist.append(bool(alive))
-        return list(hist)
+        rtts = _rtt_history.setdefault(host, deque(maxlen=50))
+        rtts.append(rtt_ms)
+        return list(hist), list(rtts)
 
 
 def set_status_cache(results):
@@ -157,7 +161,11 @@ def run_monitor_cycle(config, log, state, trend_store=None):
 
         result["maintenance"] = bool(device.get("maintenance"))
         result["paused"] = bool(device.get("paused"))
-        result["history"] = _append_history(result["host"], result["ping"]["alive"])
+        result["group"] = device.get("group", "")
+        history, rtt_history = _append_history(
+            result["host"], result["ping"]["alive"], result["ping"]["rtt_ms"])
+        result["history"] = history
+        result["rtt_history"] = rtt_history
 
         if trend_store is not None:
             trend_store.record(
