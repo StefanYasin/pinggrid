@@ -34,3 +34,15 @@ def test_empty_store():
         store = TrendStore(path=os.path.join(tmp, "none.jsonl"))
         assert store.history() == []
         assert store.uptime_summary("x") is None
+
+
+def test_bare_filename_does_not_crash(monkeypatch, tmp_path):
+    """monitor.py constructs TrendStore("history.jsonl") with a bare filename.
+
+    os.path.dirname("") is "", and os.makedirs("") raises FileNotFoundError,
+    which crashed the monitor loop on first run.
+    """
+    monkeypatch.chdir(tmp_path)
+    store = TrendStore("history.jsonl")
+    store.record("router", "up", 5)
+    assert (tmp_path / "history.jsonl").exists()

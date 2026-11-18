@@ -14,7 +14,9 @@ class TrendStore:
     def __init__(self, path=None):
         self.path = path or os.path.join(
             os.path.dirname(__file__), "history.jsonl")
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        _dir = os.path.dirname(self.path)
+        if _dir:
+            os.makedirs(_dir, exist_ok=True)
 
     def record(self, device_name, status, latency_ms=None):
         """Append one check result. status: 'up' | 'down' | 'degraded'"""
