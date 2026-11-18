@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- `TrendStore` no longer crashes when given a bare filename (`monitor.py` passes `"history.jsonl"`, whose `dirname` is empty)
+
 ## [1.3.0] - 2026-11-16
 
 ### Added
